@@ -337,7 +337,7 @@ void jet_lcd_id_power(int pull)
 #ifdef CONFIG_MSM_IOMMU
 #define MSM_PMEM_SIZE 0x00000000 /* 0 Mbytes */
 #else
-#define MSM_PMEM_SIZE 0x4000000 /* 64 Mbytes */
+#define MSM_PMEM_SIZE 0x4800000 
 #endif
 #define MSM_LIQUID_PMEM_SIZE 0x4000000 /* 64 Mbytes */
 
@@ -356,6 +356,7 @@ void jet_lcd_id_power(int pull)
 #define MSM_ION_MM_SIZE		0x4700000
 #else
 #define MSM_ION_MM_SIZE		MSM_PMEM_ADSP_SIZE - MSM_PMEM_ADSP2_SIZE
+#define MSM_ION_ROTATOR_SIZE	MSM_PMEM_ADSP2_SIZE
 #endif
 #define MSM_ION_QSECOM_SIZE	0x100000 /* (1MB) */
 #define MSM_ION_MFC_SIZE	0x100000  //SZ_8K
@@ -366,6 +367,7 @@ void jet_lcd_id_power(int pull)
 #define MSM_ION_HEAP_NUM	8
 #endif
 #define MSM_LIQUID_ION_MM_SIZE (MSM_ION_MM_SIZE + 0x600000)
+static unsigned int msm_ion_cp_mm_size = MSM_ION_MM_SIZE;
 #else
 #define MSM_PMEM_KERNEL_EBI1_SIZE  0x110C000
 #define MSM_ION_HEAP_NUM	1
@@ -686,69 +688,27 @@ static void reserve_ion_memory(void)
 {
 #if defined(CONFIG_ION_MSM) && defined(CONFIG_MSM_MULTIMEDIA_USE_ION)
 	unsigned int i;
-	unsigned int reusable_count = 0;
 
-	adjust_mem_for_liquid();
-	fmem_pdata.size = 0;
-	fmem_pdata.reserved_size = 0;
-
-	/* We only support 1 reusable heap. Check if more than one heap
-	 * is specified as reusable and set as non-reusable if found.
-	 */
-	for (i = 0; i < ion_pdata.nr; ++i) {
-		const struct ion_platform_heap *heap = &(ion_pdata.heaps[i]);
-
-		if (heap->type == ION_HEAP_TYPE_CP && heap->extra_data) {
-			struct ion_cp_heap_pdata *data = heap->extra_data;
-
-			reusable_count += (data->reusable) ? 1 : 0;
-
-			if (data->reusable && reusable_count > 1) {
-				pr_err("%s: Too many heaps specified as "
-					"reusable. Heap %s was not configured "
-					"as reusable.\n", __func__, heap->name);
-				data->reusable = 0;
+	if (!pmem_param_set && machine_is_msm8960_liquid()) {
+		msm_ion_cp_mm_size = MSM_LIQUID_ION_MM_SIZE;
+		for (i = 0; i < ion_pdata.nr; i++) {
+			if (ion_pdata.heaps[i].id == ION_CP_MM_HEAP_ID) {
+				ion_pdata.heaps[i].size = msm_ion_cp_mm_size;
+				pr_debug("msm_ion_cp_mm_size 0x%x\n",
+					msm_ion_cp_mm_size);
+				break;
 			}
 		}
 	}
-
-	for (i = 0; i < ion_pdata.nr; ++i) {
-		int reusable = 0;
-		int adjacent_heap_id = INVALID_HEAP_ID;
-		int adj_reusable = 0;
-		const struct ion_platform_heap *heap = &(ion_pdata.heaps[i]);
-
-		if (heap->extra_data) {
-			switch (heap->type) {
-			case ION_HEAP_TYPE_CP:
-				reusable = ((struct ion_cp_heap_pdata *)
-						heap->extra_data)->reusable;
-				break;
-			case ION_HEAP_TYPE_CARVEOUT:
-				adjacent_heap_id = ((struct ion_co_heap_pdata *)
-					heap->extra_data)->adjacent_mem_id;
-				break;
-			default:
-				break;
-			}
-		}
-
-		if (adjacent_heap_id != INVALID_HEAP_ID) {
-			const struct ion_platform_heap *adj_heap =
-						find_ion_heap(adjacent_heap_id);
-			if (adj_heap) {
-				adj_reusable = ((struct ion_cp_heap_pdata *)
-						adj_heap->extra_data)->reusable;
-				if (adj_reusable)
-					fmem_pdata.reserved_size += heap->size;
-			}
-		}
-
-		if (!reusable && !adj_reusable)
-			reserve_mem_for_ion(MEMTYPE_EBI1, heap->size);
-		else
-			fmem_pdata.size += heap->size;
-	}
+	msm8960_reserve_table[MEMTYPE_EBI1].size += msm_ion_cp_mm_size;
+	msm8960_reserve_table[MEMTYPE_EBI1].size += MSM_ION_MM_FW_SIZE;
+	msm8960_reserve_table[MEMTYPE_EBI1].size += MSM_ION_MFC_SIZE;
+	msm8960_reserve_table[MEMTYPE_EBI1].size += MSM_ION_QSECOM_SIZE;
+	msm8960_reserve_table[MEMTYPE_EBI1].size += MSM_ION_AUDIO_SIZE;
+#ifndef CONFIG_MSM_IOMMU
+	msm8960_reserve_table[MEMTYPE_EBI1].size += MSM_ION_SF_SIZE;
+	msm8960_reserve_table[MEMTYPE_EBI1].size += MSM_ION_ROTATOR_SIZE;
+#endif
 #endif
 }
 
@@ -871,7 +831,6 @@ static void __init jet_early_memory(void)
 static void __init jet_reserve(void)
 {
 	msm_reserve();
-	fmem_pdata.phys = reserve_memory_for_fmem(fmem_pdata.size);
 }
 static int msm8960_change_memory_power(u64 start, u64 size,
 	int change_type)
@@ -914,16 +873,18 @@ int set_two_phase_freq(int cpufreq);
 #endif  /* CONFIG_FB_MSM_OVERLAY1_WRITEBACK */
 
 #define MDP_VSYNC_GPIO 0
-
-#define PANEL_NAME_MAX_LEN	30
-#define MIPI_CMD_NOVATEK_QHD_PANEL_NAME	"mipi_cmd_novatek_qhd"
-#define MIPI_VIDEO_NOVATEK_QHD_PANEL_NAME	"mipi_video_novatek_qhd"
-#define MIPI_VIDEO_TOSHIBA_WSVGA_PANEL_NAME	"mipi_video_toshiba_wsvga"
-#define MIPI_VIDEO_CHIMEI_WXGA_PANEL_NAME	"mipi_video_chimei_wxga"
-#define MIPI_VIDEO_SIMULATOR_VGA_PANEL_NAME	"mipi_video_simulator_vga"
-#define MIPI_CMD_RENESAS_FWVGA_PANEL_NAME	"mipi_cmd_renesas_fwvga"
-#define HDMI_PANEL_NAME	"hdmi_msm"
-#define TVOUT_PANEL_NAME	"tvout_msm"
+#define MIPI_CMD_NOVATEK_QHD_PANEL_NAME        "mipi_cmd_novatek_qhd"
+#define MIPI_VIDEO_NOVATEK_QHD_PANEL_NAME      "mipi_video_novatek_qhd"
+#define MIPI_VIDEO_TOSHIBA_WSVGA_PANEL_NAME    "mipi_video_toshiba_wsvga"
+#define MIPI_VIDEO_TOSHIBA_WUXGA_PANEL_NAME    "mipi_video_toshiba_wuxga"
+#define MIPI_VIDEO_CHIMEI_WXGA_PANEL_NAME      "mipi_video_chimei_wxga"
+#define MIPI_VIDEO_CHIMEI_WUXGA_PANEL_NAME     "mipi_video_chimei_wuxga"
+#define MIPI_VIDEO_SIMULATOR_VGA_PANEL_NAME    "mipi_video_simulator_vga"
+#define MIPI_CMD_RENESAS_FWVGA_PANEL_NAME      "mipi_cmd_renesas_fwvga"
+#define MIPI_VIDEO_ORISE_720P_PANEL_NAME       "mipi_video_orise_720p"
+#define MIPI_CMD_ORISE_720P_PANEL_NAME       "mipi_cmd_orise_720p"
+#define HDMI_PANEL_NAME        "hdmi_msm"
+#define TVOUT_PANEL_NAME       "tvout_msm"
 
 static struct resource msm_fb_resources[] = {
 	{
