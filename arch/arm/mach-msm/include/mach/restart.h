@@ -42,8 +42,6 @@ enum RESTART_MODE {
 	RESTART_MODE_ERASE_EFS,
 	RESTART_MODE_MAX
 };
-void set_ramdump_reason(const char *msg);
-unsigned get_restart_reason(void);
 void msm_set_restart_mode(int mode);
 void msm_restart(char mode, const char *cmd);
 #elif defined(CONFIG_ARCH_FSM9XXX)
