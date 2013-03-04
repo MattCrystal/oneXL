@@ -1,0 +1,12 @@
+--- arch/arm/mach-msm/board-msm8x60.c
++++ arch/arm/mach-msm/board-msm8x60.c
+@@ -27,6 +27,9 @@
+ 
+  #include <mach/board.h>
+  #include <mach/msm_iomap.h>
++#include "gpiomux.h"
++
++struct msm_gpiomux_config msm_gpiomux_configs[GPIOMUX_NGPIOS] = {};
+ 
+ 
+  static void __init msm8x60_map_io(void)
