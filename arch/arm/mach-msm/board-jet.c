@@ -688,9 +688,6 @@ static void reserve_ion_memory(void)
 	unsigned int i;
 	unsigned int reusable_count = 0;
 
-	adjust_mem_for_liquid();
-	fmem_pdata.size = 0;
-	fmem_pdata.reserved_size = 0;
 
 	/* We only support 1 reusable heap. Check if more than one heap
 	 * is specified as reusable and set as non-reusable if found.
@@ -739,8 +736,6 @@ static void reserve_ion_memory(void)
 			if (adj_heap) {
 				adj_reusable = ((struct ion_cp_heap_pdata *)
 						adj_heap->extra_data)->reusable;
-				if (adj_reusable)
-					fmem_pdata.reserved_size += heap->size;
 			}
 		}
 
@@ -871,7 +866,6 @@ static void __init jet_early_memory(void)
 static void __init jet_reserve(void)
 {
 	msm_reserve();
-	fmem_pdata.phys = reserve_memory_for_fmem(fmem_pdata.size);
 }
 static int msm8960_change_memory_power(u64 start, u64 size,
 	int change_type)
@@ -915,7 +909,6 @@ int set_two_phase_freq(int cpufreq);
 
 #define MDP_VSYNC_GPIO 0
 
-#define PANEL_NAME_MAX_LEN	30
 #define MIPI_CMD_NOVATEK_QHD_PANEL_NAME	"mipi_cmd_novatek_qhd"
 #define MIPI_VIDEO_NOVATEK_QHD_PANEL_NAME	"mipi_video_novatek_qhd"
 #define MIPI_VIDEO_TOSHIBA_WSVGA_PANEL_NAME	"mipi_video_toshiba_wsvga"
@@ -4264,12 +4257,10 @@ static struct msm_mmc_slot_reg_data mmc_slot_vreg_data[MAX_SDCC_CONTROLLER] = {
 	/* SDCC1 : eMMC card connected */
 	[SDCC1] = {
 		.vdd_data = &mmc_vdd_reg_data[SDCC1],
-		.vccq_data = &mmc_vccq_reg_data[SDCC1],
 	},
 	/* SDCC3 : External card slot connected */
 	[SDCC3] = {
 		.vdd_data = &mmc_vdd_reg_data[SDCC3],
-		.vddp_data = &mmc_vddp_reg_data[SDCC3],
 	}
 };
 
@@ -4389,9 +4380,7 @@ static struct mmc_platform_data msm8960_sdc1_data = {
 	.sup_clk_table	= sdc1_sup_clk_rates,
 	.sup_clk_cnt	= ARRAY_SIZE(sdc1_sup_clk_rates),
 	.slot_type		= &jet_sdc1_slot_type,
-	.pclk_src_dfab	= 1,
 	.nonremovable	= 1,
-	.vreg_data	= &mmc_slot_vreg_data[SDCC1],
 	.pin_data	= &mmc_slot_pin_data[SDCC1],
 	.uhs_caps	= (MMC_CAP_1_8V_DDR | MMC_CAP_UHS_SDR25 | MMC_CAP_UHS_SDR50 | MMC_CAP_UHS_DDR50)
 };
@@ -4404,7 +4393,6 @@ static struct mmc_platform_data msm8960_sdc3_data = {
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 	.sup_clk_table	= sdc3_sup_clk_rates,
 	.sup_clk_cnt	= ARRAY_SIZE(sdc3_sup_clk_rates),
-	.pclk_src_dfab	= 1,
 #ifdef CONFIG_MMC_MSM_SDC3_WP_SUPPORT
 /*	.wpswitch_gpio	= PM8921_GPIO_PM_TO_SYS(16),*/
 #endif
@@ -4428,12 +4416,10 @@ static struct mmc_platform_data msm8960_sdc3_data = {
 static void __init msm8960_init_mmc(void)
 {
 #ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
-	msm8960_sdc1_data.swfi_latency = msm_rpm_get_swfi_latency();
 	/* SDC1 : eMMC card connected */
 	msm_add_sdcc(1, &msm8960_sdc1_data);
 #endif
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
-	msm8960_sdc3_data.swfi_latency = msm_rpm_get_swfi_latency();
 	/* SDC3: External card slot */
 	msm_add_sdcc(3, &msm8960_sdc3_data);
 #endif
@@ -4498,7 +4484,6 @@ static struct msm_otg_platform_data msm_otg_pdata = {
 	.mode			= USB_OTG,
 	.otg_control		= OTG_PMIC_CONTROL,
 	.phy_type		= SNPS_28NM_INTEGRATED_PHY,
-	.vbus_power		= msm_hsusb_vbus_power,
 	.power_budget		= 750,
 };
 #endif
@@ -4623,7 +4608,6 @@ static struct android_usb_platform_data android_usb_pdata = {
 	.update_pid_and_serial_num = usb_diag_update_pid_and_serial_num,
 	.usb_id_pin_gpio = JET_USB_ID1,
 	.usb_rmnet_interface = "smd,bam",
-	.sfab_lock = usb_sfab_lock_control,
 	.nluns = 1,
 };
 
